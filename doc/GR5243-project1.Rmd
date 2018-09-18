@@ -1,0 +1,300 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+#The science of happiness
+
+```{r pressure,echo=FALSE,fig.cap="A caption",out.width = '100%'}
+knitr::include_graphics('happy.png')
+```
+
+The happiness becomes one of the most poupular topics in human's life.  I might say everyone is in the pursuit of happines.  But what makes us feel happy? In this project, we use the natural langauge processing and text mining techniques to explore the patterns behind happy moments. What are type of words and sentences widely used in HappyDB? How emotional are the contents? What are major categories of happy moments? Is there any difference on the categories of happy moments between 24 hours period and 3-months period, female and male, married and not married,old and young? 
+
+
+***PART1:What type of words and sentences that are widely used in the happy moments?***
+```{r}
+library(ggplot2)
+senselabel <- read.csv("senselabel.csv")
+cleaned_hm <- read.csv("cleaned_hm.csv")
+word <- table(senselabel$POS)
+par(oma=c(1,1,1,1))
+par(mar=c(4,5,2,1))
+barplot(word[order(word)],horiz=TRUE,las=1,col=rainbow(12),border=NA,
+        main = "Frequency of word type in happy moments",xlab="Number of occurances")
+```
+
+The barplot shows that nouns, verbs and pronouns are three major word types used to describe happy momoents,this is consistent with the most simple structure of a sentence,which is (subject(pronoun)+predicate(verb)+object(nouns)).
+
+```{r}
+set.seed(1234)
+library(tm)
+library(SnowballC)
+library(wordcloud)
+processed_moments <- read.csv("processed_moments.csv")
+corpus <- Corpus(VectorSource(processed_moments$text))
+corpus <- tm_map(corpus,removeWords,c("found","watched","day","time","nice","hours","started","moment","played","told","received","finished","fun","talked","home","beautiful"))
+wordcloud(corpus,max.words=200,random.order=FALSE,colors=brewer.pal(8,"Dark2"))
+
+```
+
+The word "friend" appears most prominently in HappyDB; "family" occurs as the second majority;It indicates that "friends" and "family" are two major factors that affect our happiness.
+ "wife"" and "husband"" shows up with equally propotion; However, "dinner" shows up more often than "lunch",which is consistent with the simple logic that more people are free at dinner time and can perform more activities.  
+
+```{r}
+merged_1 <- merge(senselabel,cleaned_hm,by="hmid")
+hp_number <- length(unique(merged_1$hmid))
+verb_contained_hmid <- merged_1$hmid[merged_1$POS=="VERB"]
+props <- table(verb_contained_hmid)
+props_df <- data.frame(props)
+props_final_df <- data.frame(table(props_df$Freq))
+props_final <- (props_final_df$Freq)
+props_final <- c((hp_number-sum(props_final)),props_final)
+merged_1_data <- rep(0:(length(props_final)-1),props_final)
+merged_1_data_selected <- merged_1_data[1:sum(props_final[1:8])]
+df <- data.frame(number=merged_1_data_selected)
+ggplot(data=df,aes(x=number,fill=factor(merged_1_data_selected)))+geom_histogram(binwidth=1)+xlab("The number of verb occurance")+ylab("The number of sentences")
+```
+ 
+ This histogram shows that more than 50% of the sentences in happy moments have 2 or more verbs,more than 40% of the sentence have 3 or more verbs, which is likely to say that workers expalain their happy monents in a complicated sentence structure. 
+ 
+ Up to now, the analysis shows that the sentences of HappyDB are mostly with complicated structure.  The major word types indicate that cleaned HappyDB follows a standard sentence structure. Most frequent words occured are "friend"" and "family"
+
+***PART2:How emotional the content is?***
+
+I used the valence-arousal-dominance score to calcualted the emotion score 
+```{r}
+VAD <- read.csv("vad.csv")
+VAD[is.na(VAD)] <- 0
+data_VAD <- data.frame(merge(cleaned_hm,VAD),na.rm=TRUE)
+library(ggplot2)
+valence_score <- mean(data_VAD$valency,na.rm=TRUE)
+arousal_score <- mean(data_VAD$arousal,na.rm=TRUE)
+dominance_score <- mean(data_VAD$dominance,na.rm=TRUE)
+score <- c(valence_score,arousal_score,dominance_score)
+names(score) <- c("valency","arousal","dominance")
+score
+emo_vec <- c("valency","dominance","arousal")
+for(i in 1:nrow(VAD)){
+  VAD$emotion[i]<-emo_vec[as.numeric(which.max(VAD[i,2:4]))]
+}
+```
+
+```{r}
+t <- data.frame((table(VAD$emotion))/length(VAD$emotion))
+colnames(t) <- c("category","propotion")
+t
+```
+The valence, arousal and dominance are three dimensions of emotions;The proption shows that the dominant emotion status of HappyDB is high positive valency; These three high similar score values(V=6.26,A=4.32,D=5.70) indicate that the contents of happy moments has rich postitive emotions
+ 
+ 
+***PART3:What are major categories of happy momoents***
+```{r}
+entertainment_data <- read.csv("entertainment-dict.csv")
+exercise_data <- read.csv("exercise-dict.csv")
+family_data <- read.csv("family-dict.csv")
+food_data <- read.csv("food-dict.csv")
+people_data <- read.csv("people-dict.csv")
+pets_data <- read.csv("pets-dict.csv")
+school_data <- read.csv("school-dict.csv")
+shopping_data <- read.csv("shopping-dict.csv")
+work_data <- read.csv("work-dict.csv")
+logic <- function(dict){
+vector <- rep(0,nrow(processed_moments))
+for( i in 1:nrow(processed_moments)){
+s <- as.vector(unlist(strsplit(as.String(processed_moments$text[i])," ")))
+if(sum(match((as.vector(t(dict))),s),na.rm=TRUE)>0){count <- 1}
+else{count <- 0}
+vector[i] <- count 
+}
+return(vector)
+}
+```
+
+```{r}
+entertainment <- logic(entertainment_data)
+exercise <- logic(exercise_data)
+family <- logic(family_data)
+food <- logic(food_data)
+people <-logic(people_data)
+pets <- logic(pets_data)
+school <- logic(school_data)
+shopping  <- logic(shopping_data)
+work <- logic(work_data)
+```
+
+```{r}
+slices<- c((sum(entertainment))/nrow(processed_moments),(sum(exercise))/nrow(processed_moments),(sum(family))/nrow(processed_moments),(sum(food))/nrow(processed_moments),(sum(people))/nrow(processed_moments),(sum(pets))/nrow(processed_moments),(sum(school))/nrow(processed_moments),(sum(shopping))/nrow(processed_moments),(sum(work))/nrow(processed_moments))
+lbls <- c("entertainment","exercise","family","food","people","pets","school","shopping","work")
+pie(slices,labels=lbls,main="Distribution of topics")
+```
+
+According to the pie plot,"people","family" and "food" are three major topics of the centents in happy moments. 
+
+***How the category of the happy moments affected by reflection period, gender, martial status and age***
+```{r}
+library(ggplot2)
+df <- data.frame(processed_moments,entertainment,exercise,family,food,people,pets,school,shopping,work)
+df_24 <- df[df$reflection_period=="24h",]
+df_3 <- df[df$reflection_period=="3m",]
+find_prop <- function(data){
+  (apply(data[,c("entertainment","exercise","family","food","people","pets","school","shopping","work")],2,sum))
+}
+create <- function(s,data){
+m <- data.frame(matrix(0,9,3))
+colnames(m) <- (c("group","topics","prop"))
+m["group"] <- rep(s,9)
+m["topics"] <- c("entertainment","exercise","family","food","people","pets","school","shopping","work")
+m["prop"] <- as.vector(data.frame(unlist(find_prop(data)))[,1])/nrow(data)
+return (m)
+}
+create2 <- function(s,data){
+m <- data.frame(matrix(0,7,3))
+colnames(m) <- (c("group","category","prop"))
+m["group"] <- rep(s,7)
+m["category"] <- c("achievement","affection","bonding","enjoy the moment","exercise","leisure","nature")
+m["prop"] <- (data.frame((table(data$predicted_category)))[,2])/nrow(data)
+return (m)
+}
+
+d1 <- create("24h",df_24)
+d2 <- create("3m",df_3)
+d3 <- create2("24h",df_24)
+d4 <- create2("3m",df_3)
+d <- rbind(d1,d2)
+D <- rbind(d3,d4)
+par(mfrow=c(1,2))
+ggplot(data=d,aes(x=group,y=topics))+geom_tile(aes(fill=prop))
+ggplot(data=D,aes(x=group,y=category))+geom_tile(aes(fill=prop))
+```
+
+In first heatmap, the topic "food" has a higher percentage in 24h period; while "school" and "work"has a higher percentage in 3m period; the food is a daily activity, while school and work are associated with long term achievements.  this means that people in 24h period are more likely to talk about things that occur daily,while people in 3m period are more likely to remember long term happineess such as achievements in work or school.
+
+```{r}
+library(ggplot2)
+demo <- read.csv("demographic.csv")
+m <- merge(df, demo )
+df_m <- m[m$gender=="m",]
+df_f <- m[m$gender=="f",]
+m1 <- create("male",df_m)
+f1 <- create("female",df_f)
+mf <- rbind(m1,f1)
+m2 <- create2("male",df_m)
+m3 <- create2("female",df_f)
+mf2 <- rbind(m2,m3)
+par(mfrow=c(1,2))
+ggplot(data=mf,aes(x=group,y=topics))+geom_tile(aes(fill=prop))
+ggplot(data=mf2,aes(x=group,y=category))+geom_tile(aes(fill=prop))
+```
+
+The topic "people","family" and "pets" which can be categoried into "affection" occur more frequently in female; while "exercise" which can be categoried into "achievement" and "entertainment" which can be categoried into "leisure" occur more frequently in male; This means that female are more easily to feel happy if they have good affection; males are more pleased by achievements.
+ 
+
+
+```{r}
+married <- m[m$marital=="married",]
+single <- m[m$marital=="single",]
+divorced <- m[m$marital=="divorced",]
+separated <- m[m$marital=="separated",]
+widowed <- m[m$marital=="widowed",]
+a1 <- create2("married",married)
+a2 <- create2("single",single)
+a3 <- create2("divorced",divorced)
+a4 <- create2("separated",separated)
+a5 <- create2("widowed",widowed)
+a11 <- create("married",married)
+a22 <- create("single",single)
+a33 <- create("divorced",divorced)
+a44 <- create("separated",separated)
+a55 <- create("widowed",widowed)
+par(mfrow=c(1,2))
+ggplot(data=rbind(a11,a22,a33,a44,a55),aes(x=group,y=topics))+geom_tile(aes(fill=prop))
+ggplot(data=rbind(a1,a2,a3,a4,a5),aes(x=group,y=category))+geom_tile(aes(fill=prop))
+```
+
+"affection" plays the most important role in married group, this is clear as the married group formed thier family, the family always come first; besides the married group, "affection" is also a major category for widowed group, this because they lost love and they need more emotional support; Moreover, "achievement" and "bonding" can make single group happy, this is because most of them are young and have more free time to pursue their goals as well as social stuff. 
+
+
+
+```{r}
+demo_cleaned <- read.csv("demographic_cleaned.csv")
+d <- merge(df,demo_cleaned)
+```
+
+```{r}
+d <- d[order(d$age),]
+```
+
+```{r}
+find_age <- function(data){
+age_group <- rep(NA,nrow(data))
+for(i in 1: nrow(data)){
+  if(data$age[i] <= 18){
+    age_group[i] <- "2-18"
+  }
+  else if(data$age[i] <= 30){
+    age_group[i] <- "19-30"
+  }
+  else if (data$age[i] <= 50){
+    age_group[i] <- "31-50"
+  }
+  else if(data$age[i] <= 65){
+    age_group[i] <- "51-65"
+  }
+  else
+    age_group[i] <- ">65"
+}
+return (age_group)
+}
+```
+
+```{r}
+age_group <- find_age(d)
+d <- data.frame(d,age_group)
+kids <- create2("2-18",d[d$age_group=="2-18",])
+young <- create2("19-30",d[d$age_group == "19-30",])
+middle <- create2("31-50",d[d$age_group == "31-50",])
+early_old <- create2("51-65",d[d$age_group == "51-65",])
+old <- create2(">65",d[d$age_group == ">65",])
+
+```
+
+```{r}
+transform <- function(df){
+  m <- matrix(0,1,7)
+  dimnames(m) <- list(df[1,1],df[,"category"])
+  m[1,] <- df[,"prop"]
+ return(m)
+}
+```
+
+```{r}
+kids_t <- transform(kids)
+young_t <- transform(young)
+middle_t <- transform(middle)
+early_old_t <- transform(early_old)
+old_t <- transform(old)
+new <- (data.matrix(rbind(kids_t,young_t,middle_t,early_old_t,old_t)))
+heatmap <- heatmap(new,Rowv=NA,ColV=NA,col=heat.colors(256),scale="column",margins=c(10,7))
+```
+
+Age ">65" has higher propotion of category "enjoy the moment", which means >65" age group
+is more pleased by happy things that occurs recently, as old people will not care much about things in the future, they want to focus on the time right now ;"But for age "51-65","exercise" and "leisure" mean most to them, as most of them got retired and they want to spend time in health care and travel; "affection"  are one of major categories for age "19-30" and age "2-18", where  people get married easily at age "19-30", kids care most about their parents as parents and siblings are closed people to them; "bonding" occupies the largest propotion in age "31-50" as they are in the rising status of the career, bonding means "social intercourse"; 
+
+***PART4:Conclusion***
+
+1. The sentences of HappyDB are mostly with complicated structure(more than 2 verbs in a sentence for over 50% of sentences). Most frequent words occured are "friend"" and "family"; The workers describe happy monents with a positive and rich emotion. These are the features of the corpus of HappyDB.
+
+2. "People" ,"family" and "food" are three major sources of happiness for all type of people. The source of happiness is affected by the reflection period(time), gender, marital status and age.  Daily tasks like eating are source of short term happiness, while outstanding achievement in work or school are sources of long term happiness; Women and married group are more pleased by good affections, while men and single group are more pleased by achievement and bonding; exercise,daily tasks and travel can please relatively old people, social comumunication and work achievement can please middle-aged people, while good affection can please kids. 
+
+
+
+
+
+
